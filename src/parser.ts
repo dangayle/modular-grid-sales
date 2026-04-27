@@ -43,10 +43,11 @@ export function parseRackHtml(html: string): RackInfo {
     })
   );
 
-  // Sort by row, then col
+  // Sort by vendor, then name
   parsedModules.sort((a, b) => {
-    if (a.row !== b.row) return a.row - b.row;
-    return a.col - b.col;
+    const vendorCmp = a.vendor.localeCompare(b.vendor);
+    if (vendorCmp !== 0) return vendorCmp;
+    return a.name.localeCompare(b.name);
   });
 
   return {

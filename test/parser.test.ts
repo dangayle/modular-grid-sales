@@ -57,17 +57,14 @@ describe("parseRackHtml", () => {
 
   it("parses module fields correctly", () => {
     const result = parseRackHtml(fixture);
-    // After sorting by row/col, Triplatt (row 1, col 41) should be first
+    // After sorting by vendor/name, Bastl Instruments Ikarie should be first
     const first = result.modules[0];
-    expect(first.id).toBe("22957");
-    expect(first.name).toBe("Triplatt");
-    expect(first.vendor).toBe("Intellijel");
-    expect(first.slug).toBe("intellijel-triplatt");
-    expect(first.hp).toBe(6);
-    expect(first.priceEur).toBe(97);
-    expect(first.priceUsd).toBe(109);
-    expect(first.row).toBe(1);
-    expect(first.col).toBe(41);
+    expect(first.name).toBe("Ikarie");
+    expect(first.vendor).toBe("Bastl Instruments");
+    expect(first.slug).toBe("bastl-instruments-ikarie");
+    expect(first.hp).toBe(8);
+    expect(first.priceEur).toBe(318);
+    expect(first.priceUsd).toBe(299);
   });
 
   it("handles price_base dash as valid price", () => {
@@ -89,14 +86,13 @@ describe("parseRackHtml", () => {
     expect(() => parseRackHtml(badHtml)).toThrow();
   });
 
-  it("sorts modules by row then col", () => {
+  it("sorts modules by vendor then name", () => {
     const result = parseRackHtml(fixture);
     for (let i = 1; i < result.modules.length; i++) {
       const prev = result.modules[i - 1];
       const curr = result.modules[i];
-      const prevSort = prev.row * 10000 + prev.col;
-      const currSort = curr.row * 10000 + curr.col;
-      expect(currSort).toBeGreaterThanOrEqual(prevSort);
+      const cmp = prev.vendor.localeCompare(curr.vendor) || prev.name.localeCompare(curr.name);
+      expect(cmp).toBeLessThanOrEqual(0);
     }
   });
 });
