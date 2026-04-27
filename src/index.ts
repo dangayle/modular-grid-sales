@@ -96,8 +96,9 @@ app.get("/rack-exporter", (c) => {
     const reformat = () => {
       if (!lastRack) return;
       const mods = [...lastRack.modules].sort(sortFns[sortBy.val]);
-      const header = "## " + lastRack.name + "\n\n*" + mods.length + " modules \u2014 [ModularGrid](https://modulargrid.net/e/racks/view/" + lastRack.id + ")*\n\n";
-      markdown.val = header + mods.map(fmtLine).join("\n") + "\n";
+      const nl = String.fromCharCode(10);
+      const header = "## " + lastRack.name + nl + nl + "*" + mods.length + " modules \u2014 [ModularGrid](https://modulargrid.net/e/racks/view/" + lastRack.id + ")*" + nl + nl;
+      markdown.val = header + mods.map(fmtLine).join(nl) + nl;
     };
 
     const copyText = async (text) => {
