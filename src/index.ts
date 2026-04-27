@@ -152,7 +152,7 @@ app.get("/rack-exporter", (c) => {
       ),
       () => error.val ? p({ style: "color: #dc2626; margin: 1rem 0;" }, error.val) : "",
       () => markdown.val ? div(
-        p({ style: "margin: 1rem 0 0.5rem; font-weight: bold;" }, () => rackName.val + " \\u2014 " + moduleCount.val + " modules"),
+        p({ style: "margin: 1rem 0 0.5rem; font-weight: bold;" }, () => rackName.val + " \u2014 " + moduleCount.val + " modules"),
         pre(markdown),
         button({ class: "copy-btn", onclick: () => copyText(markdown.val), style: "margin-top: 0.5rem;" },
           () => copied.val ? "Copied!" : "Copy Markdown"
