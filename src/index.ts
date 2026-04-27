@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { extractRackUrl, parseRackHtml } from "./parser";
+import { extractRackUrl, parseRackHtml, sortModules } from "./parser";
+import type { SortBy } from "./parser";
 import { formatAsMarkdown, formatAsPlainList } from "./formatter";
 
 const app = new Hono();
@@ -62,7 +63,7 @@ app.get("/rack-exporter", (c) => {
   <script type="module">
     import van from "https://cdn.jsdelivr.net/npm/vanjs-core@1.5.5/src/van.min.js";
 
-    const { div, form, input, button, pre, p, label } = van.tags;
+    const { div, form, input, button, pre, p, label, span, fieldset, legend } = van.tags;
 
     const url = van.state("");
     const loading = van.state(false);
@@ -72,6 +73,32 @@ app.get("/rack-exporter", (c) => {
     const rackName = van.state("");
     const moduleCount = van.state(0);
     const includePrice = van.state(false);
+    const sortBy = van.state("manufacturer");
+    let lastRack = null;
+
+    const sortFns = {
+      manufacturer: (a, b) => a.vendor.localeCompare(b.vendor) || a.name.localeCompare(b.name),
+      price: (a, b) => (a.priceUsd ?? a.priceEur ?? Infinity) - (b.priceUsd ?? b.priceEur ?? Infinity),
+      hp: (a, b) => a.hp - b.hp,
+    };
+
+    const fmtLine = (m) => {
+      let line = "- " + m.vendor + " " + m.name + " (" + m.hp + "hp)";
+      if (includePrice.val) {
+        const parts = [];
+        if (m.priceEur != null) parts.push("\u20ac" + m.priceEur);
+        if (m.priceUsd != null) parts.push("$" + m.priceUsd);
+        if (parts.length) line += " \u2014 " + parts.join(" / ");
+      }
+      return line;
+    };
+
+    const reformat = () => {
+      if (!lastRack) return;
+      const mods = [...lastRack.modules].sort(sortFns[sortBy.val]);
+      const header = "## " + lastRack.name + "\n\n*" + mods.length + " modules \u2014 [ModularGrid](https://modulargrid.net/e/racks/view/" + lastRack.id + ")*\n\n";
+      markdown.val = header + mods.map(fmtLine).join("\n") + "\n";
+    };
 
     const copyText = async (text) => {
       await navigator.clipboard.writeText(text);
@@ -88,10 +115,11 @@ app.get("/rack-exporter", (c) => {
         const res = await fetch("/rack-exporter/api/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: url.val, includePrice: includePrice.val }),
+          body: JSON.stringify({ url: url.val, includePrice: includePrice.val, sortBy: sortBy.val }),
         });
         const data = await res.json();
         if (!res.ok) { error.val = data.error; return; }
+        lastRack = data.rack;
         markdown.val = data.markdown;
         rackName.val = data.rack.name;
         moduleCount.val = data.rack.modules.length;
@@ -108,9 +136,18 @@ app.get("/rack-exporter", (c) => {
           input({ type: "url", placeholder: "https://modulargrid.net/e/racks/view/...", oninput: e => url.val = e.target.value, value: url, required: true }),
           button({ type: "submit", disabled: loading }, () => loading.val ? "Loading..." : "Export"),
         ),
-        label({ style: "display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer;" },
-          input({ type: "checkbox", checked: includePrice, onchange: e => includePrice.val = e.target.checked }),
-          "Include prices",
+        div({ style: "display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;" },
+          label({ style: "display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer;" },
+            input({ type: "checkbox", checked: includePrice, onchange: e => includePrice.val = e.target.checked }),
+            "Include prices",
+          ),
+          span({ style: "font-size: 0.9rem; color: #666;" }, "Sort by:"),
+          ...["manufacturer", "price", "hp"].map(s =>
+            label({ style: "display: flex; align-items: center; gap: 0.25rem; font-size: 0.9rem; cursor: pointer;" },
+              input({ type: "radio", name: "sortBy", value: s, checked: s === "manufacturer", onchange: () => { sortBy.val = s; reformat(); } }),
+              s === "hp" ? "HP" : s.charAt(0).toUpperCase() + s.slice(1),
+            )
+          ),
         ),
       ),
       () => error.val ? p({ style: "color: #dc2626; margin: 1rem 0;" }, error.val) : "",
@@ -130,7 +167,9 @@ app.get("/rack-exporter", (c) => {
 // API endpoint to parse a rack
 app.post("/rack-exporter/api/parse", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const { url, includePrice } = body as { url?: string; includePrice?: boolean };
+  const { url, includePrice, sortBy: rawSortBy } = body as { url?: string; includePrice?: boolean; sortBy?: string };
+  const validSorts = ["manufacturer", "price", "hp"] as const;
+  const sortBy: SortBy = validSorts.includes(rawSortBy as any) ? (rawSortBy as SortBy) : "manufacturer";
 
   if (!url) {
     return c.json({ error: "URL is required" }, 400);
@@ -167,6 +206,7 @@ app.post("/rack-exporter/api/parse", async (c) => {
 
   try {
     const rack = parseRackHtml(html);
+    sortModules(rack.modules, sortBy);
     const formatOpts = { includePrice: !!includePrice };
     const markdownOutput = formatAsMarkdown(rack, formatOpts);
     const plainOutput = formatAsPlainList(rack, formatOpts);

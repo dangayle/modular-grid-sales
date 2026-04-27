@@ -107,6 +107,60 @@ describe("Worker API", () => {
     }
   });
 
+  it("POST /api/parse sorts by hp when requested", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(fixture, { status: 200 })
+    );
+
+    try {
+      const res = await app.request("/rack-exporter/api/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: "https://modulargrid.net/e/racks/view/3116603",
+          sortBy: "hp",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      const hps = data.rack.modules.map((m: any) => m.hp);
+      for (let i = 1; i < hps.length; i++) {
+        expect(hps[i]).toBeGreaterThanOrEqual(hps[i - 1]);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("POST /api/parse sorts by price when requested", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(fixture, { status: 200 })
+    );
+
+    try {
+      const res = await app.request("/rack-exporter/api/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: "https://modulargrid.net/e/racks/view/3116603",
+          sortBy: "price",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      const prices = data.rack.modules.map((m: any) => m.priceUsd ?? m.priceEur ?? Infinity);
+      for (let i = 1; i < prices.length; i++) {
+        expect(prices[i]).toBeGreaterThanOrEqual(prices[i - 1]);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("POST /api/parse returns 502 when fetch fails", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));

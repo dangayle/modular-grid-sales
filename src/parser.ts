@@ -43,12 +43,7 @@ export function parseRackHtml(html: string): RackInfo {
     })
   );
 
-  // Sort by vendor, then name
-  parsedModules.sort((a, b) => {
-    const vendorCmp = a.vendor.localeCompare(b.vendor);
-    if (vendorCmp !== 0) return vendorCmp;
-    return a.name.localeCompare(b.name);
-  });
+  sortModules(parsedModules, "manufacturer");
 
   return {
     id: Rack.id,
@@ -56,6 +51,31 @@ export function parseRackHtml(html: string): RackInfo {
     username: User.username,
     modules: parsedModules,
   };
+}
+
+export type SortBy = "manufacturer" | "price" | "hp";
+
+export function sortModules(modules: RackModule[], sortBy: SortBy): RackModule[] {
+  switch (sortBy) {
+    case "manufacturer":
+      modules.sort((a, b) => {
+        const vendorCmp = a.vendor.localeCompare(b.vendor);
+        if (vendorCmp !== 0) return vendorCmp;
+        return a.name.localeCompare(b.name);
+      });
+      break;
+    case "price":
+      modules.sort((a, b) => {
+        const priceA = a.priceUsd ?? a.priceEur ?? Infinity;
+        const priceB = b.priceUsd ?? b.priceEur ?? Infinity;
+        return priceA - priceB;
+      });
+      break;
+    case "hp":
+      modules.sort((a, b) => a.hp - b.hp);
+      break;
+  }
+  return modules;
 }
 
 function parsePrice(value: string | number | null | undefined): number | null {

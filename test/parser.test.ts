@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseRackHtml, extractRackUrl } from "../src/parser";
+import { parseRackHtml, extractRackUrl, sortModules } from "../src/parser";
+import type { RackModule } from "../src/types";
 
 const fixture = readFileSync(
   join(__dirname, "fixtures/rack-3116603.html"),
@@ -188,6 +189,39 @@ describe("parseRackHtml edge cases", () => {
     const result = parseRackHtml(html);
     expect(result.modules[0].priceEur).toBeNull();
     expect(result.modules[0].priceUsd).toBeNull();
+  });
+});
+
+describe("sortModules", () => {
+  const modules: RackModule[] = [
+    { id: "1", name: "Zmod", vendor: "Zetacorp", slug: "z", hp: 4, description: "", priceEur: 50, priceUsd: 60, row: 1, col: 1 },
+    { id: "2", name: "Amod", vendor: "Alphaco", slug: "a", hp: 16, description: "", priceEur: 300, priceUsd: 350, row: 1, col: 5 },
+    { id: "3", name: "Mmod", vendor: "Midrange", slug: "m", hp: 8, description: "", priceEur: 100, priceUsd: null, row: 2, col: 1 },
+  ];
+
+  it("sorts by manufacturer then name", () => {
+    const sorted = sortModules([...modules], "manufacturer");
+    expect(sorted.map(m => m.vendor)).toEqual(["Alphaco", "Midrange", "Zetacorp"]);
+  });
+
+  it("sorts by price ascending", () => {
+    const sorted = sortModules([...modules], "price");
+    expect(sorted.map(m => m.name)).toEqual(["Zmod", "Mmod", "Amod"]);
+  });
+
+  it("sorts by hp ascending", () => {
+    const sorted = sortModules([...modules], "hp");
+    expect(sorted.map(m => m.hp)).toEqual([4, 8, 16]);
+  });
+
+  it("puts null-price modules last when sorting by price", () => {
+    const mods: RackModule[] = [
+      { id: "1", name: "A", vendor: "V", slug: "a", hp: 4, description: "", priceEur: null, priceUsd: null, row: 1, col: 1 },
+      { id: "2", name: "B", vendor: "V", slug: "b", hp: 4, description: "", priceEur: 10, priceUsd: 12, row: 1, col: 2 },
+    ];
+    const sorted = sortModules([...mods], "price");
+    expect(sorted[0].name).toBe("B");
+    expect(sorted[1].name).toBe("A");
   });
 });
 
