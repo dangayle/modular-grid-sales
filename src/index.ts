@@ -139,7 +139,7 @@ app.get("/rack-exporter", (c) => {
         ),
         div({ style: "display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;" },
           label({ style: "display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; cursor: pointer;" },
-            input({ type: "checkbox", checked: includePrice, onchange: e => includePrice.val = e.target.checked }),
+            input({ type: "checkbox", checked: includePrice, onchange: e => { includePrice.val = e.target.checked; reformat(); } }),
             "Include prices",
           ),
           span({ style: "font-size: 0.9rem; color: #666;" }, "Sort by:"),
