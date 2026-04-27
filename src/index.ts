@@ -4,8 +4,36 @@ import { formatAsMarkdown, formatAsPlainList } from "./formatter";
 
 const app = new Hono();
 
-// Serve the HTML page for GET /
+// Landing page
 app.get("/", (c) => {
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>confirminate.com</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #1a1a1a; }
+    h1 { margin-bottom: 1rem; }
+    ul { list-style: none; }
+    li { margin-bottom: 0.5rem; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .desc { color: #666; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>confirminate.com</h1>
+  <ul>
+    <li><a href="/rack-exporter">ModularGrid Rack Exporter</a> <span class="desc">&mdash; Generate module lists from ModularGrid rack URLs</span></li>
+  </ul>
+</body>
+</html>`);
+});
+
+// Rack Exporter page
+app.get("/rack-exporter", (c) => {
   return c.html(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -57,7 +85,7 @@ app.get("/", (c) => {
       markdown.val = "";
       loading.val = true;
       try {
-        const res = await fetch("/api/parse", {
+        const res = await fetch("/rack-exporter/api/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: url.val, includePrice: includePrice.val }),
@@ -100,7 +128,7 @@ app.get("/", (c) => {
 });
 
 // API endpoint to parse a rack
-app.post("/api/parse", async (c) => {
+app.post("/rack-exporter/api/parse", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { url, includePrice } = body as { url?: string; includePrice?: boolean };
 

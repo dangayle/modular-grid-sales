@@ -2,5 +2,9 @@ name = "modulargrid-rack-exporter"
 compatibility_date = "2025-04-01"
 main = "src/index.ts"
 
+routes = [
+  { pattern = "confirminate.com", custom_domain = true },
+]
+
 [assets]
 directory = "public"

@@ -13,10 +13,21 @@ describe("Worker API", () => {
     vi.restoreAllMocks();
   });
 
-  it("GET / returns HTML page", async () => {
+  it("GET / returns landing page with link", async () => {
     const res = await app.request("/");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("/rack-exporter");
+    expect(html).toContain("confirminate.com");
+  });
+
+  it("GET /rack-exporter returns rack exporter HTML", async () => {
+    const res = await app.request("/rack-exporter");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("ModularGrid Rack Exporter");
   });
 
   it("POST /api/parse returns modules for valid URL", async () => {
@@ -26,7 +37,7 @@ describe("Worker API", () => {
     );
 
     try {
-      const res = await app.request("/api/parse", {
+      const res = await app.request("/rack-exporter/api/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -48,7 +59,7 @@ describe("Worker API", () => {
   });
 
   it("POST /api/parse returns 400 for missing URL", async () => {
-    const res = await app.request("/api/parse", {
+    const res = await app.request("/rack-exporter/api/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -60,7 +71,7 @@ describe("Worker API", () => {
   });
 
   it("POST /api/parse returns 400 for invalid URL", async () => {
-    const res = await app.request("/api/parse", {
+    const res = await app.request("/rack-exporter/api/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: "https://example.com/not-modulargrid" }),
@@ -78,7 +89,7 @@ describe("Worker API", () => {
     );
 
     try {
-      const res = await app.request("/api/parse", {
+      const res = await app.request("/rack-exporter/api/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -101,7 +112,7 @@ describe("Worker API", () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
     try {
-      const res = await app.request("/api/parse", {
+      const res = await app.request("/rack-exporter/api/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -124,7 +135,7 @@ describe("Worker API", () => {
     );
 
     try {
-      const res = await app.request("/api/parse", {
+      const res = await app.request("/rack-exporter/api/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -147,7 +158,7 @@ describe("Worker API", () => {
     );
 
     try {
-      const res = await app.request("/api/parse", {
+      const res = await app.request("/rack-exporter/api/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -171,7 +182,7 @@ describe("Worker API", () => {
     );
 
     try {
-      const res = await app.request("/api/parse", {
+      const res = await app.request("/rack-exporter/api/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -186,7 +197,7 @@ describe("Worker API", () => {
   });
 
   it("POST /api/parse returns 400 for invalid JSON body", async () => {
-    const res = await app.request("/api/parse", {
+    const res = await app.request("/rack-exporter/api/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "not json",
