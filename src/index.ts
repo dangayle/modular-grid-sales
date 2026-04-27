@@ -116,14 +116,14 @@ app.get("/rack-exporter", (c) => {
         const res = await fetch("/rack-exporter/api/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: url.val, includePrice: includePrice.val, sortBy: sortBy.val }),
+          body: JSON.stringify({ url: url.val, includePrice: true, sortBy: sortBy.val }),
         });
         const data = await res.json();
         if (!res.ok) { error.val = data.error; return; }
         lastRack = data.rack;
-        markdown.val = data.markdown;
         rackName.val = data.rack.name;
         moduleCount.val = data.rack.modules.length;
+        reformat();
       } catch (err) {
         error.val = "Request failed. Please try again.";
       } finally {
