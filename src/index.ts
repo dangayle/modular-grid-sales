@@ -54,6 +54,18 @@ app.get("/rack-exporter", (c) => {
     pre { white-space: pre-wrap; font-family: monospace; background: #f5f5f5; padding: 1rem; border-radius: 4px; border: 1px solid #e5e5e5; overflow-x: auto; }
     .copy-btn { background: #059669; }
     .copy-btn:hover { background: #047857; }
+    .docs { margin-top: 3rem; border-top: 1px solid #e5e5e5; padding-top: 1.5rem; }
+    .docs h2 { margin-top: 0; margin-bottom: 0.75rem; font-size: 1.3rem; }
+    .docs h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1.05rem; }
+    .docs p { margin-bottom: 0.75rem; }
+    .docs code { background: #f1f5f9; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
+    .docs pre { background: #f1f5f9; padding: 0.75rem 1rem; border-radius: 6px; overflow-x: auto; margin-bottom: 1rem; font-size: 0.85rem; line-height: 1.5; border: none; }
+    .docs pre code { background: none; padding: 0; }
+    .docs table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; font-size: 0.9rem; }
+    .docs th, .docs td { text-align: left; padding: 0.4rem 0.6rem; border: 1px solid #e5e5e5; }
+    .docs th { background: #f8fafc; font-weight: 600; }
+    .docs ul { margin-left: 1.25rem; margin-bottom: 1rem; }
+    .docs li { margin-bottom: 0.25rem; }
   </style>
 </head>
 <body>
@@ -172,6 +184,94 @@ app.get("/rack-exporter", (c) => {
       ) : "",
     );
   </script>
+
+  <div class="docs">
+    <h2>API &amp; LLM Integration</h2>
+    <p>Fetch any rack as plain markdown by ID &mdash; no UI needed:</p>
+    <pre><code>https://confirminate.com/rack-exporter/<strong>YOUR_RACK_ID</strong></code></pre>
+    <p>Find your rack ID in your ModularGrid URL:</p>
+    <pre><code>https://modulargrid.net/e/racks/view/<strong>2688230</strong>
+                                       ^^^^^^^ rack ID</code></pre>
+
+    <h3>Query Parameters</h3>
+    <table>
+      <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>prices</code></td><td><code>true</code></td><td>Set to <code>false</code> to hide prices</td></tr>
+        <tr><td><code>discount</code></td><td>(none)</td><td>Percentage off listed price (1&ndash;99)</td></tr>
+        <tr><td><code>sort</code></td><td><code>manufacturer</code></td><td><code>manufacturer</code>, <code>price</code>, or <code>hp</code></td></tr>
+        <tr><td><code>format</code></td><td><code>markdown</code></td><td>Set to <code>json</code> for full JSON response</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Examples</h3>
+    <pre><code># Basic markdown output
+curl https://confirminate.com/rack-exporter/2688230
+
+# 25% off all prices
+curl https://confirminate.com/rack-exporter/2688230?discount=25
+
+# Sorted by HP, no prices
+curl https://confirminate.com/rack-exporter/2688230?sort=hp&amp;prices=false
+
+# JSON response
+curl https://confirminate.com/rack-exporter/2688230?format=json</code></pre>
+
+    <h3>Example Output</h3>
+    <pre><code>## My Rack
+
+*12 modules &mdash; ModularGrid*
+
+- Intellijel Triplatt (6hp) &mdash; &euro;97 / $109
+- Make Noise Maths (20hp) &mdash; &euro;270 / $290
+- Mutable Instruments Plaits (12hp) &mdash; &euro;259 / $279</code></pre>
+
+    <h3>POST API</h3>
+    <p>Alternative endpoint that accepts a full ModularGrid URL:</p>
+    <pre><code>curl -X POST https://confirminate.com/rack-exporter/api/parse \\
+  -H "Content-Type: application/json" \\
+  -d '{"url": "https://modulargrid.net/e/racks/view/2688230", "includePrice": true}'</code></pre>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>url</code></td><td>string</td><td>Full ModularGrid rack URL (required)</td></tr>
+        <tr><td><code>includePrice</code></td><td>boolean</td><td>Include module prices (default: false)</td></tr>
+        <tr><td><code>sortBy</code></td><td>string</td><td><code>manufacturer</code>, <code>price</code>, or <code>hp</code></td></tr>
+        <tr><td><code>discountPercent</code></td><td>number</td><td>Percentage off listed price (1&ndash;99)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>LLM Integration</h3>
+    <p>Add this to your LLM&rsquo;s custom instructions or tool preferences:</p>
+    <pre><code>To get details of my Eurorack setup, fetch:
+https://confirminate.com/rack-exporter/YOUR_RACK_ID
+
+This returns a markdown list of all modules with prices.</code></pre>
+    <p>The response is plain text markdown &mdash; no parsing or authentication needed.</p>
+
+    <h3>JSON Response Shape</h3>
+    <pre><code>{
+  "rack": {
+    "id": "2688230",
+    "name": "My Rack",
+    "username": "user123",
+    "modules": [{
+      "id": "4599", "name": "Triplatt", "vendor": "Intellijel",
+      "hp": 6, "priceEur": 97, "priceUsd": 109
+    }]
+  },
+  "markdown": "## My Rack\\n...",
+  "plain": "Intellijel Triplatt\\n..."
+}</code></pre>
+
+    <h3>Notes</h3>
+    <ul>
+      <li>Responses are cached for 5 minutes</li>
+      <li>Rack data is fetched live from ModularGrid</li>
+      <li>Prices are ModularGrid listed prices (MSRP)</li>
+      <li>Source: <a href="https://github.com/dangayle/modular">github.com/dangayle/modular</a></li>
+    </ul>
+  </div>
 </body>
 </html>`);
 });
