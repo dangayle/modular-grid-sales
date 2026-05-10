@@ -250,6 +250,166 @@ describe("Worker API", () => {
     }
   });
 
+  it("GET /rack-exporter/:rackId returns markdown", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(fixture, { status: 200 })
+    );
+
+    try {
+      const res = await app.request("/rack-exporter/3116603");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/plain");
+      const text = await res.text();
+      expect(text).toContain("## Intellijel Stealth");
+      expect(text).toContain("- Intellijel Triplatt (6hp)");
+      // prices included by default
+      expect(text).toContain("$109");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("GET /rack-exporter/:rackId with discount applies percentage", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(fixture, { status: 200 })
+    );
+
+    try {
+      const res = await app.request("/rack-exporter/3116603?discount=25");
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain("$82");
+      expect(text).not.toContain("$109");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("GET /rack-exporter/:rackId?format=json returns JSON", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(fixture, { status: 200 })
+    );
+
+    try {
+      const res = await app.request("/rack-exporter/3116603?format=json");
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.rack.id).toBe("3116603");
+      expect(data.markdown).toContain("Intellijel Triplatt");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("GET /rack-exporter/:rackId?prices=false omits prices", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(fixture, { status: 200 })
+    );
+
+    try {
+      const res = await app.request("/rack-exporter/3116603?prices=false");
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).not.toContain("$");
+      expect(text).not.toContain("€");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("GET /rack-exporter/:rackId returns 502 on fetch failure", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+
+    try {
+      const res = await app.request("/rack-exporter/3116603");
+      expect(res.status).toBe(502);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("GET /rack-exporter/:rackId rejects absurdly long rack IDs", async () => {
+    const res = await app.request("/rack-exporter/1234567890123");
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toContain("Invalid rack ID");
+  });
+
+  it("GET /rack-exporter/:rackId ignores invalid discount values", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(fixture, { status: 200 }))
+    );
+
+    try {
+      // NaN discount
+      const res1 = await app.request("/rack-exporter/3116603?discount=abc");
+      expect(res1.status).toBe(200);
+      const text1 = await res1.text();
+      expect(text1).toContain("$109");
+
+      // Negative discount
+      const res2 = await app.request("/rack-exporter/3116603?discount=-10");
+      expect(res2.status).toBe(200);
+      const text2 = await res2.text();
+      expect(text2).toContain("$109");
+
+      // 100% discount
+      const res3 = await app.request("/rack-exporter/3116603?discount=100");
+      expect(res3.status).toBe(200);
+      const text3 = await res3.text();
+      expect(text3).toContain("$109");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("GET /rack-exporter/:rackId sets cache headers on success", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(fixture, { status: 200 })
+    );
+
+    try {
+      const res = await app.request("/rack-exporter/3116603");
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toContain("max-age=300");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("POST /api/parse with discountPercent applies discount", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(fixture, { status: 200 })
+    );
+
+    try {
+      const res = await app.request("/rack-exporter/api/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: "https://modulargrid.net/e/racks/view/3116603",
+          includePrice: true,
+          discountPercent: 25,
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.markdown).toContain("$82");
+      expect(data.markdown).not.toContain("$109");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("POST /api/parse returns 400 for invalid JSON body", async () => {
     const res = await app.request("/rack-exporter/api/parse", {
       method: "POST",

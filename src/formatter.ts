@@ -2,12 +2,18 @@ import type { RackInfo, RackModule } from "./types";
 
 export interface FormatOptions {
   includePrice?: boolean;
+  discountPercent?: number;
 }
 
-function formatPrice(mod: RackModule): string {
+function applyDiscount(price: number, discountPercent?: number): number {
+  if (!discountPercent || discountPercent <= 0 || discountPercent >= 100) return price;
+  return Math.round(price * (1 - discountPercent / 100));
+}
+
+function formatPrice(mod: RackModule, discountPercent?: number): string {
   const parts: string[] = [];
-  if (mod.priceEur != null) parts.push(`€${mod.priceEur}`);
-  if (mod.priceUsd != null) parts.push(`$${mod.priceUsd}`);
+  if (mod.priceEur != null) parts.push(`€${applyDiscount(mod.priceEur, discountPercent)}`);
+  if (mod.priceUsd != null) parts.push(`$${applyDiscount(mod.priceUsd, discountPercent)}`);
   return parts.length > 0 ? ` — ${parts.join(" / ")}` : "";
 }
 
@@ -20,7 +26,7 @@ export function formatAsMarkdown(rack: RackInfo, options: FormatOptions = {}): s
   if (rack.modules.length === 0) return header;
 
   const lines = rack.modules.map((mod) => {
-    const price = options.includePrice ? formatPrice(mod) : "";
+    const price = options.includePrice ? formatPrice(mod, options.discountPercent) : "";
     return `- ${mod.vendor} ${mod.name} (${mod.hp}hp)${price}`;
   });
 
@@ -33,7 +39,7 @@ export function formatAsMarkdown(rack: RackInfo, options: FormatOptions = {}): s
 export function formatAsPlainList(rack: RackInfo, options: FormatOptions = {}): string {
   if (rack.modules.length === 0) return "";
   return rack.modules.map((mod) => {
-    const price = options.includePrice ? formatPrice(mod) : "";
+    const price = options.includePrice ? formatPrice(mod, options.discountPercent) : "";
     return `${mod.vendor} ${mod.name}${price}`;
   }).join("\n");
 }

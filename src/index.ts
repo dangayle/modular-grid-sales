@@ -74,6 +74,7 @@ app.get("/rack-exporter", (c) => {
     const moduleCount = van.state(0);
     const includePrice = van.state(false);
     const sortBy = van.state("manufacturer");
+    const discountPct = van.state(0);
     let lastRack = null;
 
     const sortFns = {
@@ -82,12 +83,17 @@ app.get("/rack-exporter", (c) => {
       hp: (a, b) => a.hp - b.hp,
     };
 
+    const applyDisc = (p) => {
+      const d = discountPct.val;
+      return (d > 0 && d < 100) ? Math.round(p * (1 - d / 100)) : p;
+    };
+
     const fmtLine = (m) => {
       let line = "- " + m.vendor + " " + m.name + " (" + m.hp + "hp)";
       if (includePrice.val) {
         const parts = [];
-        if (m.priceEur != null) parts.push("\u20ac" + m.priceEur);
-        if (m.priceUsd != null) parts.push("$" + m.priceUsd);
+        if (m.priceEur != null) parts.push("\u20ac" + applyDisc(m.priceEur));
+        if (m.priceUsd != null) parts.push("$" + applyDisc(m.priceUsd));
         if (parts.length) line += " \u2014 " + parts.join(" / ");
       }
       return line;
@@ -113,10 +119,11 @@ app.get("/rack-exporter", (c) => {
       markdown.val = "";
       loading.val = true;
       try {
+        const discountVal = parseInt(document.getElementById('discount')?.value || '0', 10);
         const res = await fetch("/rack-exporter/api/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: url.val, includePrice: true, sortBy: sortBy.val }),
+          body: JSON.stringify({ url: url.val, includePrice: true, sortBy: sortBy.val, discountPercent: discountVal || undefined }),
         });
         const data = await res.json();
         if (!res.ok) { error.val = data.error; return; }
@@ -142,6 +149,10 @@ app.get("/rack-exporter", (c) => {
             input({ type: "checkbox", checked: includePrice, onchange: e => { includePrice.val = e.target.checked; reformat(); } }),
             "Include prices",
           ),
+          label({ style: "display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem;" },
+            "Discount %:",
+            input({ id: "discount", type: "number", min: "0", max: "99", value: "0", style: "width: 4rem; padding: 0.25rem 0.4rem; border: 1px solid #ccc; border-radius: 4px;", oninput: e => { discountPct.val = parseInt(e.target.value, 10) || 0; reformat(); } }),
+          ),
           span({ style: "font-size: 0.9rem; color: #666;" }, "Sort by:"),
           ...["manufacturer", "price", "hp"].map(s =>
             label({ style: "display: flex; align-items: center; gap: 0.25rem; font-size: 0.9rem; cursor: pointer;" },
@@ -165,12 +176,109 @@ app.get("/rack-exporter", (c) => {
 </html>`);
 });
 
+// Helper: fetch and parse a rack from ModularGrid
+type FetchResult =
+  | { rack: ReturnType<typeof parseRackHtml> }
+  | { error: string; status: 502 | 422 };
+
+async function fetchAndParseRack(rackId: string): Promise<FetchResult> {
+  let response: Response;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    response = await fetch(
+      `https://www.modulargrid.net/e/racks/view/${rackId}`,
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (compatible; RackExporter/1.0; +https://github.com/dangayle/modular)",
+        },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeout);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return { error: "ModularGrid request timed out", status: 502 };
+    }
+    return { error: "Failed to fetch rack page", status: 502 };
+  }
+
+  if (!response.ok) {
+    return { error: `ModularGrid returned status ${response.status}`, status: 502 };
+  }
+
+  const html = await response.text();
+  try {
+    const rack = parseRackHtml(html);
+    return { rack };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Parse error";
+    return { error: `Failed to parse rack: ${message}`, status: 422 };
+  }
+}
+
+// Sanitize discount query param: must be a finite number in (0, 100), else undefined
+function parseDiscount(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n) || n <= 0 || n >= 100) return undefined;
+  return n;
+}
+
+// GET /rack-exporter/:rackId — returns markdown directly (great for LLMs)
+app.get("/rack-exporter/:rackId{[0-9]+}", async (c) => {
+  const rackId = c.req.param("rackId");
+
+  // Guard: rack IDs are numeric but shouldn't be absurdly long
+  if (rackId.length > 12) {
+    return c.json({ error: "Invalid rack ID" }, 400);
+  }
+
+  const query = c.req.query();
+  const validSorts = ["manufacturer", "price", "hp"] as const;
+  const sortBy: SortBy = validSorts.includes(query.sort as any) ? (query.sort as SortBy) : "manufacturer";
+  const includePrice = query.prices !== "false";
+  const discountPercent = parseDiscount(query.discount);
+  const format = query.format === "json" ? "json" : "markdown";
+
+  const result = await fetchAndParseRack(rackId);
+
+  if ("error" in result) {
+    return c.json({ error: result.error }, result.status);
+  }
+
+  const { rack } = result;
+  sortModules(rack.modules, sortBy);
+  const formatOpts = { includePrice, discountPercent };
+
+  // Cache successful responses for 5 minutes (rack data doesn't change often)
+  c.header("Cache-Control", "public, max-age=300, s-maxage=300");
+
+  if (format === "json") {
+    return c.json({
+      rack,
+      markdown: formatAsMarkdown(rack, formatOpts),
+      plain: formatAsPlainList(rack, formatOpts),
+    });
+  }
+
+  const markdownOutput = formatAsMarkdown(rack, formatOpts);
+  return c.text(markdownOutput);
+});
+
 // API endpoint to parse a rack
 app.post("/rack-exporter/api/parse", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const { url, includePrice, sortBy: rawSortBy } = body as { url?: string; includePrice?: boolean; sortBy?: string };
+  const { url, includePrice, sortBy: rawSortBy, discountPercent: rawDiscount } = body as {
+    url?: string;
+    includePrice?: boolean;
+    sortBy?: string;
+    discountPercent?: number;
+  };
   const validSorts = ["manufacturer", "price", "hp"] as const;
   const sortBy: SortBy = validSorts.includes(rawSortBy as any) ? (rawSortBy as SortBy) : "manufacturer";
+  const discountPercent = typeof rawDiscount === "number" && rawDiscount > 0 && rawDiscount < 100 ? rawDiscount : undefined;
 
   if (!url) {
     return c.json({ error: "URL is required" }, 400);
@@ -181,46 +289,23 @@ app.post("/rack-exporter/api/parse", async (c) => {
     return c.json({ error: "Invalid ModularGrid rack URL" }, 400);
   }
 
-  let response: Response;
-  try {
-    response = await fetch(
-      `https://www.modulargrid.net/e/racks/view/${rackId}`,
-      {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (compatible; RackExporter/1.0; +https://github.com/dangayle/modular)",
-        },
-      }
-    );
-  } catch (err) {
-    return c.json({ error: "Failed to fetch rack page" }, 502);
+  const result = await fetchAndParseRack(rackId);
+
+  if ("error" in result) {
+    return c.json({ error: result.error }, result.status);
   }
 
-  if (!response.ok) {
-    return c.json(
-      { error: `ModularGrid returned status ${response.status}` },
-      502
-    );
-  }
+  const { rack } = result;
+  sortModules(rack.modules, sortBy);
+  const formatOpts = { includePrice: !!includePrice, discountPercent };
+  const markdownOutput = formatAsMarkdown(rack, formatOpts);
+  const plainOutput = formatAsPlainList(rack, formatOpts);
 
-  const html = await response.text();
-
-  try {
-    const rack = parseRackHtml(html);
-    sortModules(rack.modules, sortBy);
-    const formatOpts = { includePrice: !!includePrice };
-    const markdownOutput = formatAsMarkdown(rack, formatOpts);
-    const plainOutput = formatAsPlainList(rack, formatOpts);
-
-    return c.json({
-      rack,
-      markdown: markdownOutput,
-      plain: plainOutput,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Parse error";
-    return c.json({ error: `Failed to parse rack: ${message}` }, 422);
-  }
+  return c.json({
+    rack,
+    markdown: markdownOutput,
+    plain: plainOutput,
+  });
 });
 
 export default app;

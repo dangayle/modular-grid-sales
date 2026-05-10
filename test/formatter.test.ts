@@ -115,6 +115,25 @@ describe("formatAsMarkdown", () => {
     const result = formatAsMarkdown(emptyRack);
     expect(result).toContain("0 modules");
   });
+
+  it("applies discount percentage to prices", () => {
+    const result = formatAsMarkdown(sampleRack, { includePrice: true, discountPercent: 25 });
+    // $109 * 0.75 = 81.75 -> rounded to 82
+    expect(result).toContain("€73 / $82");
+    expect(result).not.toContain("$109");
+    expect(result).not.toContain("€97");
+  });
+
+  it("ignores invalid discount values", () => {
+    const result0 = formatAsMarkdown(sampleRack, { includePrice: true, discountPercent: 0 });
+    expect(result0).toContain("€97 / $109");
+
+    const result100 = formatAsMarkdown(sampleRack, { includePrice: true, discountPercent: 100 });
+    expect(result100).toContain("€97 / $109");
+
+    const resultNeg = formatAsMarkdown(sampleRack, { includePrice: true, discountPercent: -10 });
+    expect(resultNeg).toContain("€97 / $109");
+  });
 });
 
 describe("formatAsPlainList", () => {
